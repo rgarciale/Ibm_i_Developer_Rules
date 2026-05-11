@@ -73,76 +73,189 @@ Separar:
 
 ---
 
-# Tipo de fuente
 
-El código generado debe iniciar siempre con:
+# Formato base obligatorio
+
+El código debe iniciar siempre con:
 
 ```rpgle
 **FREE
+
+CTL-OPT DFTACTGRP(*NO) OPTION(*SRCSTMT:*NODEBUGIO) COMMIT(*NONE) DBGVIEW(*SOURCE);;
 ```
 
 ---
 
-# Tipo de objeto esperado
+# Tipo de programa
 
-Para mantenimientos de tablas generar módulos SQLRPGLE.
+Generar programas SQLRPGLE o RPGLE ejecutables.
 
-Usar:
+No usar:
 
 ```rpgle
 CTL-OPT NOMAIN;
 ```
 
+salvo que el usuario lo solicite explícitamente.
+
 ---
 
-# Reglas FULL FREE
+# Constantes de operación
 
-Usar siempre:
+Las constantes deben declararse usando `CONST`.
+
+Formato correcto:
 
 ```rpgle
-DCL-PROC
-DCL-PI
-DCL-S
-DCL-DS
-EXEC SQL
-END-PROC
+DCL-C OP_INSERT CONST('INSERT');
+DCL-C OP_UPDATE CONST('UPDATE');
+DCL-C OP_DELETE CONST('DELETE');
 ```
 
 No usar:
 
 ```rpgle
-C
-D
-F
+DCL-C OP_INSERT CHAR(10) VALUE('INSERT');
 ```
 
 ---
 
-# Arquitectura esperada
+# Estructuras de datos
 
-El agente debe generar código desacoplado.
+Toda estructura usada con `LIKEDS(...)` debe definirse previamente usando `DCL-DS`.
 
-Separar:
+Formato esperado:
 
-1. Validaciones
-2. Acceso a datos
-3. CRUD
-4. Manejo de errores
-5. Reglas de negocio
+```rpgle
+DCL-DS ProvinciaData QUALIFIED;
+  CodigoProvincia CHAR(3);
+  NombreProvincia CHAR(15);
+  Descripcion     CHAR(30);
+END-DS;
+```
+
+Reglas:
+
+- Definir la estructura antes del `DCL-PI`
+- Usar `QUALIFIED`
+- No usar `LIKEDS` sin `DCL-DS`
 
 ---
 
-# Reglas CRUD
+# Interfaz del programa
 
-Generar procedimientos independientes:
+El programa principal debe usar:
+
+```rpgle
+DCL-PI *N;
+```
+
+Ejemplo:
+
+```rpgle
+DCL-PI *N;
+  inProv LIKEDS(ProvinciaData) CONST;
+  OperacionParm CHAR(10) CONST;
+  outResultado ZONED(10:0);
+END-PI;
+```
+
+---
+
+# Lógica principal
+
+Incluir siempre al iniciar en los programas .sqlrpgle:
+
+```sqlrpgle
+EXEC SQL SET OPTION COMMIT = *NONE;
+```
+
+La lógica principal debe usar `SELECT`.
+
+Formato esperado:
+
+```rpgle
+SELECT OperacionParm;
+
+  WHEN-IS OP_INSERT;
+    outResultado = InsertaProvincia(inProv);
+
+  WHEN-IS OP_UPDATE;
+    outResultado = ActualizaProvincia(inProv);
+
+  WHEN-IS OP_DELETE;
+    outResultado = EliminaProvincia(inProv);
+
+  OTHER;
+    outResultado = -1;
+
+ENDSL;
+```
+
+Reglas:
+
+- Usar `SELECT`
+- Usar `WHEN-IS`
+- Usar `OTHER`
+- No usar múltiples `IF`
+
+---
+
+# Finalización del programa
+
+Al final de la lógica principal usar:
+
+```rpgle
+*INLR = *ON;
+```
+
+---
+
+# Procedimientos internos
+
+Los procedimientos internos deben definirse con `DCL-PROC`.
+
+No generar `DCL-PR` para procedimientos internos.
+
+Formato correcto:
+
+```rpgle
+DCL-PROC InsertaProvincia;
+
+  DCL-PI *N INT(10);
+    inProv LIKEDS(ProvinciaData) CONST;
+  END-PI;
+
+  RETURN SQLCODE;
+
+END-PROC;
+```
+
+---
+
+# Reglas para DCL-PR
+
+Solo usar `DCL-PR` cuando el procedimiento sea externo y tenga:
+
+```rpgle
+EXTPROC
+```
+
+o:
+
+```rpgle
+EXTPGM
+```
+
+---
+
+# Procedimientos esperados
+
+Para mantenimientos simples generar únicamente:
 
 - Inserta
 - Actualiza
 - Elimina
-- Existe
-- Obtiene
-
-Cada procedimiento debe tener una única responsabilidad.
 
 ---
 
@@ -150,178 +263,75 @@ Cada procedimiento debe tener una única responsabilidad.
 
 ## INSERT
 
-Validar existencia antes de insertar.
-
-No mezclar validaciones complejas dentro del INSERT.
-
----
-
-## UPDATE
-
-Actualizar únicamente por llave primaria.
-
----
-
-## DELETE
-
-Eliminar únicamente por llave primaria.
-
----
-
-## EXISTS
-
-Usar COUNT(1).
-
-Debe retornar indicador.
-
----
-
-# Reglas SQLCODE
-
-Validar SQLCODE después de cada operación SQL.
-
-Centralizar manejo de mensajes de error cuando sea posible.
-
----
-
-# Reglas NOMAIN
-
-Cuando el módulo use:
-
-```rpgle
-CTL-OPT NOMAIN;
-```
-
-No usar:
-
-```rpgle
-*INLR = *ON;
-```
-
-Toda la lógica debe estar encapsulada en procedimientos.
-
----
-
-# Reglas de reutilización
-
-Las validaciones deben poder reutilizarse.
-
-Ejemplos:
-
-```text
-ExisteProvincia
-ValidaProvincia
-ObtieneProvincia
-```
-
-No duplicar lógica.
-
----
-
-# Reglas de procedimientos
-
-Los procedimientos deben ser:
-
-- pequeños
-- reutilizables
-- legibles
-- especializados
-
-Evitar procedimientos monolíticos.
-
----
-
-# Reglas de comentarios
-
-Cada procedimiento debe iniciar con bloque descriptivo.
-
-Formato:
-
-```rpgle
-////////////////////////////////////////////////////////////////////////
-// Nombre del Procedimiento:                                          //
-// Descripción.............:                                          //
-// Parámetros de Entrada...:                                          //
-// Valor de Retorno........:                                          //
-////////////////////////////////////////////////////////////////////////
-```
-
----
-
-# Reglas para SQL embebido
-
-Usar siempre:
+Formato esperado:
 
 ```rpgle
 EXEC SQL
+  INSERT INTO PROVINCIAS
+    (CODIGO_PROVINCIA,
+     NOMBRE_PROVINCIA,
+     DESCRPCION)
+  VALUES
+    (:inProv.CodigoProvincia,
+     :inProv.NombreProvincia,
+     :inProv.Descripcion);
+
+RETURN SQLCODE;
 ```
-
-No usar APIs antiguas.
-
-No usar SQL dinámico salvo que el usuario lo solicite.
 
 ---
 
-# Reglas para tablas Db2 for i
+# Reglas de retorno
 
-El agente debe respetar exactamente la definición SQL de la tabla.
+Cada procedimiento debe retornar:
 
-Si existe:
-
-```sql
-CODIGO_PROVINCIA
-    FOR COLUMN COD_PROV
+```rpgle
+RETURN SQLCODE;
 ```
 
-Debe utilizar correctamente los nombres SQL.
+El tipo de retorno debe ser:
 
-No inventar columnas.
+```rpgle
+INT(10)
+```
+
+---
+
+# Principios SOLID
+
+## Single Responsibility
+
+Cada procedimiento debe hacer únicamente una operación:
+
+- insertar
+- actualizar
+- eliminar
+
+## Open/Closed
+
+Agregar nuevas operaciones mediante nuevos procedimientos.
+
+## Interface Segregation
+
+Recibir únicamente los parámetros necesarios.
+
+## Dependency Inversion
+
+El SQL embebido debe existir únicamente dentro de procedimientos internos.
 
 ---
 
 # Reglas importantes
 
+- Código full free
 - No usar RPG columnar
-- No usar fixed format
-- No usar lógica duplicada
-- No generar procedimientos gigantes
-- No mezclar lógica SQL con validaciones complejas
-- No dejar SQL sin validar
-- No generar código acoplado
-
----
-
-# Reglas para ejemplo PROVINCIAS
-
-Tabla:
-
-```text
-PROVINCIAS
-```
-
-Campos:
-
-```text
-CODIGO_PROVINCIA
-NOMBRE_PROVINCIA
-DESCRPCION
-```
-
-Llave primaria:
-
-```text
-CODIGO_PROVINCIA
-```
-
-El mantenimiento debe permitir:
-
-- Insertar provincia
-- Actualizar provincia
-- Eliminar provincia
-- Validar existencia
-- Consultar provincia
-
-Aplicando principios SOLID.
+- No usar especificaciones C, D o F
+- No generar `DCL-PR` internos
+- No usar `VALUE` para constantes
+- No usar `CHAR(...)` en `DCL-C`
+- No usar tabs
+- No usar caracteres de escape visibles
+- No dejar procedimientos sin `RETURN`
 
 ---
 
