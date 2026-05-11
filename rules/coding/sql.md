@@ -4,117 +4,252 @@
 
 ## Objetivo
 
-Este documento define las reglas para generar scripts SQL de creación de tablas en IBM i usando Db2 for i, siguiendo el formato estándar corporativo.
+Generar scripts SQL para IBM i usando Db2 for i respetando exactamente el formato corporativo definido.
 
-El agente debe crear scripts SQL completos a partir de datos básicos suministrados por el usuario.
+El agente debe solicitar únicamente la información técnica mínima necesaria para construir la tabla.
 
----
-
-# Flujo obligatorio del agente
-
-El agente debe recopilar la información en este orden:
-
-1. Metadata de la tabla
-2. Definición de campos
-3. Constraints
-4. Etiquetas y comentarios
-5. Generación final del SQL
-
-Si falta información obligatoria, el agente NO debe generar el SQL todavía. Debe preguntar únicamente por la sección faltante.
+La información documental adicional debe generarse automáticamente o dejarse en blanco.
 
 ---
 
-# 1. Metadata de la tabla
+# Información obligatoria que debe solicitar el agente
+
+## Datos de tabla
 
 El agente debe solicitar:
 
-- Nombre lógico de la tabla
-- Nombre físico/sistema de la tabla
-- Descripción de la tabla
-- Objetivo de la tabla
-- Uso de datos
-- Proyecto
-- Persona que la crea
-- Fecha de creación
+1. Nombre lógico de la tabla
+2. Nombre físico IBM i
 
-## Reglas
+---
 
-- Si no se indica nombre físico, debe proponer uno compatible con IBM i.
-- El nombre físico debe ser de máximo 10 caracteres.
-- El nombre físico debe ser único.
-- El nombre lógico puede ser largo y descriptivo.
+## Campos
 
-## Ejemplo
+Por cada campo el agente debe solicitar:
+
+1. Nombre largo
+2. Nombre corto para `FOR COLUMN`
+3. Tipo de dato
+4. Longitud
+5. ¿Permite NULL?
+
+---
+
+## Llave primaria
+
+El agente debe solicitar:
+
+- Campo o campos de llave primaria
+
+---
+
+# Reglas para tipos de dato
+
+## Tipo alfa
+
+Si el usuario indica:
 
 ```text
-Tabla lógica: PROVINCIAS
-Tabla sistema: REGPROV
-Descripción: TABLA CATALOGO DE PROVINCIAS
-Objetivo: ALMACENAR EL CATALOGO DE PROVINCIAS
-Uso de datos: TABLA DE CATALOGOS
-Proyecto: CATALOGOS BASE
-Creado por: RAMIRO GARCIA
-Fecha: AGOSTO DE 2022
+alfa
+```
+
+El agente debe generar:
+
+```sql
+CHAR(longitud)
 ```
 
 ---
 
-# 2. Definición de campos
+# Reglas para metadata documental
 
-Por cada campo, el agente debe solicitar:
+El agente NO debe solicitar información documental adicional.
 
-- Nombre largo del campo
-- Nombre corto para `FOR COLUMN`
-- Tipo de dato
-- Longitud
-- Si permite NULL
-- Valor por defecto, si aplica
-- Descripción corta para LABEL
-- Descripción larga para TEXT y COMMENT
+NO debe preguntar por:
 
-## Reglas
+- Objetivo
+- Uso de datos
+- Proyecto
+- Labels
+- Text
+- Comments
+- Historial de cambios
 
-- El nombre corto debe ser compatible con IBM i.
-- Preferir nombres cortos de máximo 10 caracteres.
-- Si el campo es obligatorio, usar `NOT NULL`.
-- Si permite nulos, no agregar `NOT NULL`.
-- Usar `FOR COLUMN` en todos los campos.
-- No inventar campos que el usuario no haya indicado.
+Sin embargo, SIEMPRE debe generar todas esas secciones.
 
 ---
 
-# 3. Constraints
+# Reglas de inferencia
 
-El agente debe preguntar por:
+El agente puede inferir información razonablemente.
 
-- Llave primaria
-- Llaves únicas
-- Llaves foráneas
-- Checks
-- Valores por defecto
-- Índices adicionales
+Ejemplos:
+
+## Nombre tabla
+
+Si la tabla es:
+
+```text
+PROVINCIAS
+```
+
+Puede generar:
+
+```text
+TABLA CATALOGO DE PROVINCIAS
+```
+
+## Objetivo
+
+Puede generar:
+
+```text
+ALMACENAR EL CATALOGO DE PROVINCIAS
+```
+
+## Uso de datos
+
+Puede generar:
+
+```text
+TABLA DE CATALOGOS
+```
+
+## Fecha
+
+Si el usuario no la indica, usar la fecha actual.
 
 ---
 
-# 4. Formato obligatorio del SQL
+# Reglas cuando no exista información
 
-El agente debe generar el SQL con la estructura corporativa estándar IBM i Db2.
+Cuando el agente no tenga información suficiente:
+
+- Debe dejar el valor en blanco
+- Debe mantener todas las secciones
+- NO debe eliminar bloques
+
+Ejemplo:
+
+```sql
+LABEL ON TABLE PROVINCIAS IS
+    '';
+
+COMMENT ON TABLE PROVINCIAS IS
+    '';
+
+LABEL ON COLUMN PROVINCIAS (
+    CODPRO IS '',
+    DESPRO IS ''
+);
+```
 
 ---
 
-# 5. Reglas de generación
+# Reglas estrictas de formato
 
-- Usar siempre `CREATE TABLE`
-- Usar siempre `FOR COLUMN`
-- Usar siempre `RCDFMT`
-- Usar siempre `RENAME TABLE ... FOR SYSTEM NAME`
-- Usar siempre:
-  - `LABEL ON TABLE`
-  - `COMMENT ON TABLE`
-  - `LABEL ON COLUMN`
-  - `LABEL ON COLUMN ... TEXT`
-  - `COMMENT ON COLUMN`
+El SQL debe respetar exactamente este formato.
+
+## Formato correcto
+
+```sql
+CODIGO_PROVINCIA
+    FOR COLUMN CODPRO
+    CHAR(5)
+    NOT NULL
+```
+
+## Formato incorrecto
+
+```sql
+CODPRO CHAR(5) FOR COLUMN "CODPRO"
+```
 
 ---
+
+# Reglas obligatorias
+
+- No usar columnas en una sola línea
+- No usar comillas dobles
+- No usar `DEFAULT` salvo que el usuario lo solicite
+- Mantener el formato FOR COLUMN exactamente igual
+- Mantener todos los bloques corporativos
+- Mantener el encabezado corporativo
+- Los `LABEL ON COLUMN` deben generarse en bloque
+- Los `COMMENT ON COLUMN` deben generarse en bloque
+
+---
+
+# Plantilla obligatoria
+
+```sql
+--====================================================================
+-- NOMBRE DE LA TABLA: <NOMBRE_FISICO>                               =
+-- DESCRIPCIÓN:                                                      =
+-- OBJETIVO:                                                         =
+--                                                                   =
+-- USO DE DATOS:                                                     =
+--                                                                   =
+-- PROYECTO:                                                         =
+--                                                                   =
+--====================================================================
+-- HECHO POR:                                                        =
+--                                                                   =
+-- FECHA:                                                            =
+--                                                                   =
+--====================================================================
+-- HISTORIAL DE CAMBIOS:                                             =
+--====================================================================
+-- HECHO POR:                                                        =
+--                                                                   =
+-- FECHA:                                                            =
+--                                                                   =
+-- DESCRIPCIÓN CAMBIO:                                               =
+--                                                                   =
+--====================================================================
+
+CREATE TABLE <NOMBRE_LOGICO> (
+    <NOMBRE_LARGO_CAMPO_1>
+        FOR COLUMN <NOMBRE_CORTO_CAMPO_1>
+        <TIPO_DATO>
+        NOT NULL,
+
+    <NOMBRE_LARGO_CAMPO_2>
+        FOR COLUMN <NOMBRE_CORTO_CAMPO_2>
+        <TIPO_DATO>
+        NOT NULL,
+
+    CONSTRAINT <NOMBRE_FISICO>_PK
+        PRIMARY KEY (<CAMPO_PK>)
+)
+RCDFMT REG+<NOMBRE_LOGICO>; --Acortar a 10 posiciones
+
+
+LABEL ON TABLE <NOMBRE_LOGICO> IS
+    '<DESCRIPCION_TABLA>';
+
+COMMENT ON TABLE <NOMBRE_LOGICO> IS
+    '<DESCRIPCION_TABLA>';
+
+LABEL ON COLUMN <NOMBRE_LOGICO> (
+    <CAMPO_CORTO_1> IS '<LABEL_CAMPO_1>',
+    <CAMPO_CORTO_2> IS '<LABEL_CAMPO_2>'
+);
+
+LABEL ON COLUMN <NOMBRE_LOGICO> (
+    <CAMPO_CORTO_1> TEXT IS '<TEXT_CAMPO_1>',
+    <CAMPO_CORTO_2> TEXT IS '<TEXT_CAMPO_2>'
+);
+
+COMMENT ON COLUMN <NOMBRE_LOGICO> (
+    <CAMPO_CORTO_1> IS '<COMMENT_CAMPO_1>',
+    <CAMPO_CORTO_2> IS '<COMMENT_CAMPO_2>'
+);
+```
+
+---
+
+# Otras reglas
+  - utiliza vscode_askQuestions para solicitar la información de forma estructurada.
 
 # Fin del documento
